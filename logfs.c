@@ -115,7 +115,12 @@ int logfs_append(struct logfs *logfs, const void *buf, uint64_t len)
         memcpy(logfs->wbuf, buf + first_chunk, second_chunk);
     }
 
-    
+
+    logfs->tail = (logfs->tail + len) % logfs->capacity;
+    logfs->size += len;
+    logfs->offset += len;
+
+    pthread_cond_signal(&logfs->Data_avail);
 
     /*All done with buffer, never forget to unlock!*/
     pthread_mutex_unlock(&logfs->lock);
