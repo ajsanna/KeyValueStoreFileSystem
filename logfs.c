@@ -130,7 +130,30 @@ int logfs_append(struct logfs *logfs, const void *buf, uint64_t len)
 int logfs_read(struct logfs *logfs, void *buf, uint64_t off, size_t len);
 
 void* worker_func(void* arg){
-    return 0; /*STUB*/
+    struct logfs *logfs = (struct logfs *)arg; /*we passed in the logfs struct.*/
+    uint64_t block_size = device_block(logfs->device);
+    uint64_t device_offset = 0;  // Local variable tracking device position
+
+    while(1)
+    {
+        pthread_mutex_lock(&logfs->lock);
+        while(logfs->size < block_size)
+        {
+            pthread_cond_wait(&logfs->Data_avail, &logfs->lock);
+        }
+
+        pthread_mutex_unlock(&logfs->lock);
+        device_write(logfs->device, logfs->wbuf + logfs->head, block_size, device_offset);
+        device_offset += block_size;  // Update local tracking   
+        
+        pthread_mutex_lock(&logfs->lock);
+        logfs->head = (logfs->head + block_size) % logfs->capacity;
+        logfs->size -= block_size;
+
+        pthread_cond_signal(&logfs->Space_avail);
+        pthread_mutex_unlock(&logfs->lock);
+
+    }
 }
 
 void logfs_close(struct logfs *logfs);
