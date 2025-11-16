@@ -88,7 +88,39 @@ struct logfs *logfs_open(const char *pathname)
 
 int logfs_append(struct logfs *logfs, const void *buf, uint64_t len)
 {
+    if(logfs->capacity < len + logfs -> offset)
+    {
+        return -1; /*not enough space for append.*/
+    }
+
+    /*Activate lock, we will be modifying the wbuf that is accessible by both threads.*/
+
+    pthread_mutex_lock(&logfs->lock);
+
+    while(logfs->capacity - logfs->size < len)
+    {
+        pthread_cond_wait(&logfs->Space_avail, &logfs->lock);
+    }
+
+    if (logfs->tail + len <= logfs->capacity) 
+    {
+        /*Simple case: one memcpy*/
+        memcpy(logfs->wbuf + logfs->tail, buf, len);
+    } else {
+    // Wraparound case: two memcpy calls
+        uint64_t first_chunk = logfs->capacity - logfs->tail;
+        memcpy(logfs->wbuf + logfs->tail, buf, first_chunk);
+
+        uint64_t second_chunk = len - first_chunk;
+        memcpy(logfs->wbuf, buf + first_chunk, second_chunk);
+    }
+
     
+
+    /*All done with buffer, never forget to unlock!*/
+    pthread_mutex_unlock(&logfs->lock);
+
+    return 0;
 }
 int logfs_read(struct logfs *logfs, void *buf, uint64_t off, size_t len);
 
